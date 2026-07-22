@@ -1,0 +1,378 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  ADMIN
+  FINANCEIRO
+  APROVADOR
+  VISUALIZADOR
+}
+
+enum EntryStatus {
+  PENDING
+  APPROVED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum ReconciliationStatus {
+  PENDING
+  SUGGESTED
+  MATCHED
+  IGNORED
+  DIVERGENT
+  DUPLICATE
+  UNIDENTIFIED
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Company {
+  id                    String @id @default(cuid())
+  name                  String
+  document              String @unique
+  currency              String @default("BRL")
+  lowCashThreshold      Decimal @default(50000) @db.Decimal(14, 2)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  users                 User[]
+  roles                 Role[]
+  customers             Customer[]
+  suppliers             Supplier[]
+  financialAccounts     FinancialAccount[]
+  receivables           Receivable[]
+  payables              Payable[]
+  payments              Payment[]
+  bankTransactions      BankTransaction[]
+  reconciliationMatches ReconciliationMatch[]
+  collectionRules       CollectionRule[]
+  collectionEvents      CollectionEvent[]
+  cashflowSnapshots     CashflowSnapshot[]
+  financialAlerts       FinancialAlert[]
+  automationRuns        AutomationRun[]
+  auditLogs             AuditLog[]
+  integrations          Integration[]
+  @@map("companies")
+}
+
+model Role {
+  id        String @id @default(cuid())
+  companyId String @map("company_id")
+  name      RoleName
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users     User[]
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+model User {
+  id           String @id @default(cuid())
+  companyId    String @map("company_id")
+  roleId       String @map("role_id")
+  name         String
+  email        String @unique
+  passwordHash String @map("password_hash")
+  active       Boolean @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role         Role @relation(fields: [roleId], references: [id])
+  @@index([companyId])
+  @@map("users")
+}
+
+model Customer {
+  id           String @id @default(cuid())
+  companyId    String @map("company_id")
+  name         String
+  document     String
+  email        String
+  phone        String
+  tradeName    String @map("trade_name")
+  riskScore    Int @default(20) @map("risk_score")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receivables  Receivable[]
+  @@unique([companyId, document])
+  @@index([companyId, name])
+  @@map("customers")
+}
+
+model Supplier {
+  id          String @id @default(cuid())
+  companyId   String @map("company_id")
+  name        String
+  document    String
+  category    String
+  recurrence  String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payables    Payable[]
+  @@unique([companyId, document])
+  @@index([companyId, name])
+  @@map("suppliers")
+}
+
+model FinancialAccount {
+  id          String @id @default(cuid())
+  companyId   String @map("company_id")
+  name        String
+  bankName    String @map("bank_name")
+  accountType String @map("account_type")
+  balance     Decimal @db.Decimal(14, 2)
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+  transactions BankTransaction[]
+  @@index([companyId])
+  @@map("financial_accounts")
+}
+
+model Receivable {
+  id            String @id @default(cuid())
+  companyId     String @map("company_id")
+  customerId    String @map("customer_id")
+  description   String
+  amount        Decimal @db.Decimal(14, 2)
+  dueDate       DateTime @map("due_date")
+  status        EntryStatus @default(PENDING)
+  paymentMethod String @map("payment_method")
+  paymentLink   String? @map("payment_link")
+  paidAt        DateTime? @map("paid_at")
+  origin        String
+  owner         String
+  category      String
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer      Customer @relation(fields: [customerId], references: [id])
+  payments      Payment[]
+  collectionEvents CollectionEvent[]
+  reconciliationMatches ReconciliationMatch[]
+  @@index([companyId, status, dueDate])
+  @@map("receivables")
+}
+
+model Payable {
+  id          String @id @default(cuid())
+  companyId   String @map("company_id")
+  supplierId  String @map("supplier_id")
+  description String
+  amount      Decimal @db.Decimal(14, 2)
+  dueDate     DateTime @map("due_date")
+  status      EntryStatus @default(PENDING)
+  category    String
+  costCenter  String @map("cost_center")
+  recurrence  String?
+  owner       String
+  approvedAt  DateTime? @map("approved_at")
+  paidAt      DateTime? @map("paid_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  payments    Payment[]
+  reconciliationMatches ReconciliationMatch[]
+  @@index([companyId, status, dueDate])
+  @@map("payables")
+}
+
+model Payment {
+  id                 String @id @default(cuid())
+  companyId          String @map("company_id")
+  financialAccountId String @map("financial_account_id")
+  receivableId       String? @map("receivable_id")
+  payableId          String? @map("payable_id")
+  amount             Decimal @db.Decimal(14, 2)
+  direction          String
+  paidAt             DateTime @map("paid_at")
+  externalReference  String? @map("external_reference")
+  idempotencyKey     String @unique @map("idempotency_key")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  company            Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  receivable         Receivable? @relation(fields: [receivableId], references: [id])
+  payable            Payable? @relation(fields: [payableId], references: [id])
+  @@index([companyId, paidAt])
+  @@map("payments")
+}
+
+model BankTransaction {
+  id                 String @id @default(cuid())
+  companyId          String @map("company_id")
+  financialAccountId String @map("financial_account_id")
+  postedAt           DateTime @map("posted_at")
+  description        String
+  amount             Decimal @db.Decimal(14, 2)
+  direction          String
+  externalId         String @map("external_id")
+  status             ReconciliationStatus @default(PENDING)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  company            Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id])
+  matches            ReconciliationMatch[]
+  @@unique([companyId, externalId])
+  @@index([companyId, status])
+  @@map("bank_transactions")
+}
+
+model ReconciliationMatch {
+  id                String @id @default(cuid())
+  companyId         String @map("company_id")
+  bankTransactionId String @map("bank_transaction_id")
+  receivableId      String? @map("receivable_id")
+  payableId         String? @map("payable_id")
+  confidence        Int
+  status            ReconciliationStatus
+  confirmedAt       DateTime? @map("confirmed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  company           Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankTransaction   BankTransaction @relation(fields: [bankTransactionId], references: [id])
+  receivable        Receivable? @relation(fields: [receivableId], references: [id])
+  payable           Payable? @relation(fields: [payableId], references: [id])
+  @@index([companyId, status])
+  @@map("reconciliation_matches")
+}
+
+model CollectionRule {
+  id           String @id @default(cuid())
+  companyId    String @map("company_id")
+  name         String
+  daysOffset   Int @map("days_offset")
+  channel      String
+  message      String
+  active       Boolean @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  events       CollectionEvent[]
+  @@unique([companyId, daysOffset])
+  @@map("collection_rules")
+}
+
+model CollectionEvent {
+  id           String @id @default(cuid())
+  companyId    String @map("company_id")
+  receivableId String @map("receivable_id")
+  ruleId       String? @map("rule_id")
+  channel      String
+  message      String
+  status       String
+  sentAt       DateTime @map("sent_at")
+  automation   String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receivable   Receivable @relation(fields: [receivableId], references: [id])
+  rule         CollectionRule? @relation(fields: [ruleId], references: [id])
+  @@index([companyId, sentAt])
+  @@map("collection_events")
+}
+
+model CashflowSnapshot {
+  id             String @id @default(cuid())
+  companyId      String @map("company_id")
+  snapshotDate   DateTime @map("snapshot_date")
+  openingBalance Decimal @map("opening_balance") @db.Decimal(14, 2)
+  expectedIn     Decimal @map("expected_in") @db.Decimal(14, 2)
+  expectedOut    Decimal @map("expected_out") @db.Decimal(14, 2)
+  projectedBalance Decimal @map("projected_balance") @db.Decimal(14, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@unique([companyId, snapshotDate])
+  @@map("cashflow_snapshots")
+}
+
+model FinancialAlert {
+  id            String @id @default(cuid())
+  companyId     String @map("company_id")
+  type          String
+  severity      Severity
+  status        AlertStatus @default(OPEN)
+  description   String
+  entityType    String @map("entity_type")
+  entityId      String? @map("entity_id")
+  fingerprint   String @unique
+  resolvedAt    DateTime? @map("resolved_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([companyId, status, severity])
+  @@map("financial_alerts")
+}
+
+model AutomationRun {
+  id           String @id @default(cuid())
+  companyId    String @map("company_id")
+  name         String
+  status       String
+  startedAt    DateTime @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  processed    Int @default(0)
+  summary      Json?
+  errorMessage String? @map("error_message")
+  idempotencyKey String @unique @map("idempotency_key")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  company      Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([companyId, startedAt])
+  @@map("automation_runs")
+}
+
+model AuditLog {
+  id         String @id @default(cuid())
+  companyId  String @map("company_id")
+  userId     String? @map("user_id")
+  action     String
+  entityType String @map("entity_type")
+  entityId   String? @map("entity_id")
+  metadata   Json?
+  ipAddress  String? @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@index([companyId, createdAt])
+  @@map("audit_logs")
+}
+
+model Integration {
+  id                  String @id @default(cuid())
+  companyId           String @map("company_id")
+  provider            String
+  status              String
+  encryptedCredentials String? @map("encrypted_credentials")
+  config              Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  company             Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@unique([companyId, provider])
+  @@map("integrations")
+}

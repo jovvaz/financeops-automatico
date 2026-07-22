@@ -1,0 +1,13 @@
+id: daily-bank-sync
+namespace: financeops.demo
+triggers:
+  - id: every_weekday
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 6 * * 1-5"
+tasks:
+  - id: import_bank_statement
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ secret('FINANCEOPS_URL') }}/api/automations/reconciliation/run"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ secret('FINANCEOPS_JOB_TOKEN') }}"

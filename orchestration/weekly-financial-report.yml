@@ -1,0 +1,17 @@
+id: weekly-financial-report
+namespace: financeops.demo
+triggers:
+  - id: monday_morning
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 8 * * 1"
+tasks:
+  - id: get_dashboard
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ secret('FINANCEOPS_URL') }}/api/dashboard"
+    method: GET
+  - id: notify_n8n
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ secret('N8N_REPORT_WEBHOOK') }}"
+    method: POST
+    contentType: application/json
+    body: "{\"type\":\"report.generated\",\"version\":1}"

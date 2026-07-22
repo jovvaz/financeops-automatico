@@ -1,0 +1,13 @@
+id: import-demo-spreadsheets
+namespace: financeops.demo
+inputs:
+  - id: file
+    type: FILE
+tasks:
+  - id: validate_columns
+    type: io.kestra.plugin.scripts.node.Script
+    script: |
+      console.log("Validar company_id, documento, valor, vencimento e referência externa");
+  - id: import_records
+    type: io.kestra.plugin.core.log.Log
+    message: "Importação idempotente usando hash do arquivo + external_id"

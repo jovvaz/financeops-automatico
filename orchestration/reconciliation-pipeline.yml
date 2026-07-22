@@ -1,0 +1,11 @@
+id: reconciliation-pipeline
+namespace: financeops.demo
+tasks:
+  - id: suggest_matches
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ secret('FINANCEOPS_URL') }}/api/automations/reconciliation/run"
+    method: POST
+  - id: create_alerts
+    type: io.kestra.plugin.core.http.Request
+    uri: "{{ secret('FINANCEOPS_URL') }}/api/automations/alerts/run"
+    method: POST

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: financeops
+      POSTGRES_USER: financeops
+      POSTGRES_PASSWORD: financeops
+    ports:
+      - "5432:5432"
+    volumes:
+      - financeops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financeops -d financeops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  financeops_pgdata:
